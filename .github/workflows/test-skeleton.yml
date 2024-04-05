@@ -1,0 +1,53 @@
+name: Generate Test Skeleton
+on:
+  pull_request:
+    types: [opened, synchronize]
+jobs:
+  generate-test-skeleton:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Fetch enough commits to identify changes
+
+      - name: Checkout Generator Repository
+        uses: actions/checkout@v3
+        with:
+          repository: 'owner/generator-repo'
+          path: 'generator-repo'
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install  # Adjust the path if your generator has a Gemfile
+
+      - name: Identify Modified Files
+        id: files
+        run: |
+          git diff --name-only ${{ github.base_ref }} ${{ github.head_ref }} | grep -E '^(controllers|models|helpers)/' > modified_files.txt
+          echo "::set-output name=files::$(cat modified_files.txt)"
+
+      - name: Run Test-Skeleton Generator for Each File
+        if: steps.files.outputs.files != ''
+        run: |
+          while read -r file; do
+            output_file_path="output/${file}"  # Define your output file path pattern
+            mkdir -p $(dirname $output_file_path)  # Create directory for output file if it doesn't exist
+            ruby generator-repo/path/to/your/generator.rb "$file" "$output_file_path"
+          done < modified_files.txt
+
+      - name: Push Generated Files and Create PR
+        uses: peter-evans/create-pull-request@v4
+        with:
+          commit-message: 'Add generated test skeletons'
+          title: 'New Test Skeletons'
+          body: 'This PR adds generated test skeletons for modified files.'
+          branch: 'generated-test-skeletons/${{ github.head_ref }}'
+          base: '${{ github.head_ref }}'
+          token: ${{ secrets.GITHUB_TOKEN }}
